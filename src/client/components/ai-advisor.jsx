@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useGlobal } from './global.jsx'
 import { getAuth } from 'firebase/auth';
+const backendURL = import.meta.env.VITE_BACKEND_URL
 
 
 const getUserToken = async () => {
@@ -51,7 +52,7 @@ const sendSecureMessage = async (question, profile = {}) => {
   const token = await getUserToken();
 
   const response = await axios.post(
-    '/api/advisor/ask',
+    `${backendURL}/api/advisor/ask`,
     { question, profile },
     {
       headers: {
