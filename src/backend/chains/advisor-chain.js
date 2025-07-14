@@ -1,4 +1,4 @@
-import { ChatGroq } from 'langchain/chat_model.groq'
+import { ChatGroq } from '@langchain/groq'
 import { RunnableSequence, RunnableMap } from '@langchain/core/runnables';
 import dotenv from 'dotenv'
 
