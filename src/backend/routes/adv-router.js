@@ -1,7 +1,7 @@
 import express from 'express';
 import { cachedStocks } from './router.js';
 import { AIAdvisorChain } from '../chains/advisor-chain.js';
-import { verifyToken } from '../firebase-admin.js'
+import verifyToken  from '../firebase-admin.js'
 
 
 const router = express.Router()
