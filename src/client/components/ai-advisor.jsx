@@ -188,6 +188,7 @@ const AIAdvisor = () => {
           });
 
           const answer = res?.answer ?? {}
+          console.log(answer)
 
           
           setMessages(prev => [
