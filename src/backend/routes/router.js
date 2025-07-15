@@ -1,5 +1,9 @@
 import express from 'express'
 import axios from 'axios'
+import dotenv from 'dotenv'
+import verifyToken  from '../firebase-admin.js'
+
+dotenv.config()
 
 
 const router = express.Router()
@@ -46,7 +50,7 @@ const fetchAllStocks = async () => {
 }
 
 
-router.get('/all', async(req, res) => {
+router.get('/all', verifyToken, async(req, res) => {
     const now = Date.now();
 
     const { industry, page = 1, limit = 10} = req.query;

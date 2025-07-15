@@ -1,5 +1,5 @@
 import admin from 'firebase-admin';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { User } from '../backend/data-model.js';
@@ -8,9 +8,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ✅ Use ENV path if provided (Render Secret File) or fallback to local dev path
-const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH || path.resolve(__dirname, '../dataflow-firebase-admin.json');
+const localPath = path.join(process.cwd(), 'dataflow-firebase-admin.json')
+
+let serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH 
+
+if (!serviceAccountPath || !existsSync(serviceAccountPath)) {
+  serviceAccountPath = localPath
+}
 
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
+console.log('✅ Using service account path:', serviceAccountPath);
+
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -20,6 +28,8 @@ if (!admin.apps.length) {
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
+  console.log('🪵 Incoming Authorization Header:', authHeader); 
+
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Invalid authorization header format' });
@@ -36,6 +46,9 @@ const verifyToken = async (req, res, next) => {
     req.user = decoded;
 
     console.log('✅ Decoded user verified:', decoded);
+    console.log('🔍 decoded.aud:', decoded.aud);
+    console.log('🔍 serviceAccount.project_id:', serviceAccount.project_id);
+
 
     await User.updateOne(
       { uid: decoded.uid },

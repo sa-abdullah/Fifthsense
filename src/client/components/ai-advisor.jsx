@@ -33,20 +33,24 @@ import {
   Smile
 } from 'lucide-react';
 import { useGlobal } from './global.jsx'
-import { getAuth } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 const backendURL = import.meta.env.VITE_BACKEND_URL
 
 
-const getUserToken = async () => {
-  const user = getAuth().currentUser;
-  // if (!user) throw new Error('User not authenticated');
-  if (!user) {
-    window.location.href = '/auth';
-    throw new Error('Redirecting to login');
-  }
-
-  return await user.getIdToken();
-};
+const getUserToken = () =>
+  new Promise((resolve, reject) => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      unsubscribe(); // prevent multiple calls
+      if (user) {
+        const token = await user.getIdToken();
+        resolve(token);
+      } else {
+        window.location.href = '/auth';
+        reject('Redirecting to login');
+      }
+    });
+  });
 
 const sendSecureMessage = async (question, profile = {}) => {
   const token = await getUserToken();

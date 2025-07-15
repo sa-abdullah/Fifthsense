@@ -116,7 +116,7 @@ const router = express.Router()
 // GET /api/advisor/full
 // Raw data for full Langchain flexibility
 // =====================
-router.get('/full', (req, res) => {
+router.get('/full', verifyToken, (req, res) => {
 
     if (!cachedStocks || cachedStocks.length === 0) {
         return res.status(503).json({ error: 'Market data not available' })
