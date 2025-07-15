@@ -50,6 +50,7 @@ const getUserToken = async () => {
 
 const sendSecureMessage = async (question, profile = {}) => {
   const token = await getUserToken();
+  console.log(token)
 
   const response = await axios.post(
     `${backendURL}/api/advisor/ask`,
