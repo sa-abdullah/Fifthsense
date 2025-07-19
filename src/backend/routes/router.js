@@ -1,86 +1,54 @@
-import express from 'express'
-import axios from 'axios'
-import dotenv from 'dotenv'
-import verifyToken  from '../firebase-admin.js'
+import express from 'express';
+import axios from 'axios';
 
-dotenv.config()
+const router = express.Router();
 
+const BASE_URL = 'https://stocks-data-llv3.onrender.com/api/stocks';
 
-const router = express.Router()
+let cachedStocks = [];
+let lastFetched = 0;
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
-const FINNHUB_STOCKS_API_KEY = process.env.FINNHUB_STOCKS_API_KEY
-const BASE_API = 'https://finnhub.io/api/v1/'
-
-let cachedStocks = []
-let lastFetched = 0
-const CACHE_DURATION = 1000 * 60 * 10 
-
-
-
+// ✅ Fetch from your Render API
 const fetchAllStocks = async () => {
-    const symbolRes = await axios.get(`${BASE_API}/stock/symbol?exchange=US&token=${FINNHUB_STOCKS_API_KEY}`); 
-    const symbols = symbolRes.data.filter(s => s.type == 'Common Stock').slice(0, 100);
+    console.log('Fetching stocks from stocks API...');
+    try {
+        const response = await axios.get(BASE_URL);
+        cachedStocks = response?.data?.data || []; // Assuming API returns an array of stocks
+        lastFetched = Date.now();
+        console.log(`✅ Cached ${cachedStocks.length} stocks`);
+        return cachedStocks;
+    } catch (err) {
+        console.error('Error fetching stocks:', err.message);
+        return [];
+    }
+};
 
-    const enriched = await Promise.all(symbols.map(async (s) => {
-        try {
-            const [quote, profile] = await Promise.all([
-                axios.get(`${BASE_API}/quote?symbol=${s.symbol}&token=${FINNHUB_STOCKS_API_KEY}`),
-                axios.get(`${BASE_API}/stock/profile2?symbol=${s.symbol}&token=${FINNHUB_STOCKS_API_KEY}`)
-            ]); 
-
-            return {
-                symbol: s.symbol,
-                name: profile.data.name || s.description, 
-                industry: profile.data.finnhubIndustry || 'N/A', 
-                logo: profile.data.logo || null, 
-                price: quote.data.c, 
-                high: quote.data.h, 
-                low: quote.data.l, 
-                previousClose: quote.data.pc,
-                peRatio: profile.data.peBasicExclExtraTTM || null, 
-                epsTTM: profile.data.epsTTM || null, 
-                marketCap: profile.data.marketCapitalization || null
-            }
-        } catch(err) {
-            return null
-        }
-    })); 
-
-    return enriched.filter(Boolean)
-}
-
-
-router.get('/all', verifyToken, async(req, res) => {
+// ✅ Route to get stocks (with pagination)
+router.get('/all', async (req, res) => {
     const now = Date.now();
-
-    const { industry, page = 1, limit = 10} = req.query;
-
     if (!cachedStocks.length || now - lastFetched > CACHE_DURATION) {
-        try {
-            cachedStocks = await fetchAllStocks();
-            lastFetched = now; 
-        } catch (err) {
-            res.status(500).json({ error: 'Failed to fetch stock list', details: err.message })
-        }
+        await fetchAllStocks();
     }
 
-    let results = [...cachedStocks]
-
-    if (industry) {
-        results = results.filter(s => 
-            s.industry.toLowerCase().includes(industry.toLowerCase())
-        );
-    }
-    const start = (page - 1) * limit
-    const paginated = results.slice(start, start + Number(limit))
+    const { page = 1, limit = 50 } = req.query;
+    const start = (page - 1) * limit;
+    const paginated = cachedStocks.slice(start, start + Number(limit));
 
     res.json({
-        total: results.length, 
+        total: cachedStocks.length,
         page: Number(page),
-        limit: Number(limit), 
+        limit: Number(limit),
         results: paginated
-    })
-    // res.json(cachedStocks);
-})
-export { cachedStocks }
+    });
+});
+
+// ✅ Auto-refresh cache every 10 mins
+(async function initCache() {
+    console.log('Initializing stock cache...');
+    await fetchAllStocks();
+    setInterval(fetchAllStocks, CACHE_DURATION);
+})();
+
+export { cachedStocks, fetchAllStocks };
 export default router;

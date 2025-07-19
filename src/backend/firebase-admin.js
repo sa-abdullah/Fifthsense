@@ -62,7 +62,7 @@ const verifyToken = async (req, res, next) => {
         },
       },
       { upsert: true }
-    );
+    ).catch(err => console.error('❌ DB update failed', err.message))
 
     next();
   } catch (err) {

@@ -4,17 +4,17 @@ import router from '../src/backend/routes/router.js'
 // import recRouter from '../src/backend/routes/rec-router.js'
 // import insightRouter from '../src/backend/routes/insights-router.js'
 import advisorRouter from '../src/backend/routes/adv-router.js'
+import connectDB from '../src/backend/db.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
 
+await connectDB()
+
 
 const app = express()
 
-app.use(cors({
-  origin: ['http://localhost:5173'], // or whatever your frontend dev URL is
-  credentials: true,
-}));
+app.use(cors());
 app.use(express.json());
 
 
@@ -28,7 +28,6 @@ const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`)
 })
-
 
 
 

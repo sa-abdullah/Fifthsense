@@ -1,6 +1,8 @@
 import { ChatGroq } from '@langchain/groq'
-import { RunnableSequence, RunnableMap } from '@langchain/core/runnables';
+import { RunnableSequence } from '@langchain/core/runnables';
 import dotenv from 'dotenv'
+import { ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate } from '@langchain/core/prompts'
+import { Readable } from 'stream'
 
 dotenv.config()
 
@@ -20,58 +22,84 @@ export const AIAdvisorChain = RunnableSequence.from([
             context: formattedContext
         }
     }, 
-    RunnableMap.from({
-        answer: async ({ question, userProfile,  context }) => {
-            const userPrompt = buildUserPrompt({ question, userProfile, context })
-            console.log('Prompt:', userPrompt)
-            const raw =  await model.invoke([
-                {
-                    role: 'system', 
-                    content: "You are an AI financial advisor focused on the USA stock market for the Nigerian investors. Your answers must be strategic, backed by data, and personalized to the user's profile. Always return structured JSON containing your main advice, optional analysis, and optional suggestions."
-                }, 
-                {
-                    role: 'user', 
-                    content: userPrompt
-                }
-            ])
 
-            try {
-                const answer = JSON.parse(raw.content)
-                
-                return answer.content ? answer : { content: raw.content };
+    async ({ question, userProfile,  context }) => {
+      const userPrompt = buildUserPrompt({ question, userProfile, context })
+      console.log('userPrompt:', userPrompt)
+  
+      const prompt = ChatPromptTemplate.fromMessages([
+        SystemMessagePromptTemplate.fromTemplate(systemPrompt), 
+        HumanMessagePromptTemplate.fromTemplate("{input}")
+      ])
 
-            } catch(err) {
-                console.warn('Failed to parse JSON. Returning Raw text')
-                return { content: raw.content}
-            }
-        }
-    })
+      const chain = prompt.pipe(model)
+
+      return { chain, userPrompt }
+    }
+  
 ])
 
 
 
 const formatMarketData = (stocks) => {
+  if (!stocks || stocks.length === 0) {
+    return "Market data is currently unavailable. I can still help with general investment questions and analysis.";
+  }
   const lines = stocks.map(stock => {
-    return `${stock.symbol} (${stock.name}) — Price: ₦${stock.price}, PE: ${stock.peRatio}, EPS: ${stock.epsTTM}, Sector: ${stock.industry}`;
+    return `${stock.symbol} (${stock.securityName}) — Open: ₦${stock.open}, Close: ₦${stock.close}, Change: ${stock.change}, Volume: ${stock.dailyVolume}`;
   });
 
-  return lines.slice(0, 50).join('\n'); // Limit to avoid context overflow
-}
+  return lines.slice(0, 50).join('\n'); // ✅ Convert to string
+};
+
+
+
+
+
+
+const systemPrompt = `
+You are an intelligent, helpful AI assistant with deep expertise in financial markets (especially U.S. stocks and Nigerian investor needs). You can also handle general-purpose queries beyond finance with clarity and friendliness.
+
+Only use the user's financial profile or market data when relevant to the question. If the user asks a casual or unrelated question (e.g., "Hi", "Tell me a joke", "How's the weather?"), respond naturally without referencing their profile or finance.
+
+Always return your answer in **valid JSON format** with the following keys:
+{{
+  "content": "<a natural language explanation>",
+  "suggestions": ["<short follow-up questions>"],
+  "analysis": {{
+    "rating": "Buy/Sell/Hold",
+    "targetPrice": "₦45.00",
+    "currentPrice": "₦38.50",
+    "upside": "16.9%"
+}}
+// Only include the 'analysis' field if your answer includes evaluation of a specific stock or investment.
+// Only include the 'suggestions' field if absolutely needed
+// You must always return the 'content' field and it must always be a string
+// If market data is unavailable, mention this in your response but still provide helpful general advice
+}}
+If the question is unrelated to finance or analysis, leave out the analysis field.
+Ensure the entire response is a single parsable JSON object.
+NEVER wrap with backticks or triple backticks.
+NEVER include explanation outside the JSON.
+`.trim()
+
+
+
+
 
 
 const buildUserPrompt = ({ question, userProfile, context }) => {
-  return `
-Based on the following:
+  let prompt = `❓ Question:\n${question}\n`
 
-📌 User Profile:
-${JSON.stringify(userProfile, null, 2)}
+  if (userProfile && Object.keys(userProfile).length > 0) {
+    prompt += `\n📌 User Profile:\n${JSON.stringify(userProfile, null, 2)}\n`
+  }
 
-📊 Market Data:
-${context}
+  if (context && context.trim().length > 0) {
+    prompt += `\n📊 Market Data:\n${context}\n`
+  }
 
-❓ Question:
-${question}
-
+  prompt += `
 📦 Respond ONLY in this JSON format:
 {
   "content": "Main answer here...",
@@ -83,7 +111,9 @@ ${question}
     "upside": "16.9%"
   }
 }
-`.trim();
-};
+`
+
+  return prompt.trim()
+}
 
 
