@@ -1,10 +1,19 @@
 import { ChatGroq } from '@langchain/groq'
 import { RunnableSequence } from '@langchain/core/runnables';
 import dotenv from 'dotenv'
-import { ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate } from '@langchain/core/prompts'
+import { ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
+import { BufferWindowMemory, CombinedMemory } from "langchain/memory";
+import { VectorStoreRetrieverMemory } from 'langchain/memory';
+import { Chroma } from "@langchain/community/vectorstores/chroma";
+import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/huggingface_transformers";
+import { PineconeStore } from '@langchain/pinecone'
+import { Pinecone } from '@pinecone-database/pinecone'
 import { Readable } from 'stream'
+import mongoose from 'mongoose';
 
 dotenv.config()
+
+mongoose.connect(process.env.MONGODB_URI)
 
 const model = new ChatGroq({
     temperature: 0.7, 
@@ -12,14 +21,67 @@ const model = new ChatGroq({
     apiKey: process.env.GROQ_API_KEY
 })
 
+const pinecone = new Pinecone({
+  apiKey: process.env.PINECONE_API_KEY
+})
+
+const index = pinecone.Index(process.env.PINECONE_INDEX)
+
+//✅ Embeddings & Pinecone Setup for longterm memory
+const embeddings = new HuggingFaceTransformersEmbeddings({
+  model: "Xenova/all-MiniLM-L6-v2"
+});
+
+export const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+  pineconeIndex: index
+})
+
+
+const memoryCache = new Map();
+export const getOrCreateMemory = (userId) => {
+  if (memoryCache.has(userId)) {
+    return memoryCache.get(userId);
+  }
+
+  
+
+  // ✅ User-specific retriever
+  const retriever = vectorStore.asRetriever({
+    filter: { userId } // Security + relevance
+  });
+
+  const vectorMemory = new VectorStoreRetrieverMemory({
+    retriever,
+    memoryKey: "long_term_history", 
+    inputKey: "input"
+  });
+
+  const bufferMemory = new BufferWindowMemory({
+    k: 5,
+    returnMessages: true,
+    memoryKey: "history", 
+    inputKey: "input"
+  });
+
+  const combinedMemory = new CombinedMemory({
+    memories: [bufferMemory, vectorMemory]
+  });
+
+  memoryCache.set(userId, combinedMemory);
+
+  setTimeout(() => memoryCache.delete(userId), 1000 * 60 * 30);
+  return combinedMemory;
+}
+
 export const AIAdvisorChain = RunnableSequence.from([
     
-    (input) => {
+    async (input) => {
+
         const formattedContext = formatMarketData(input.marketData)
         return {
             question: input.question, 
             userProfile: input.userProfile, 
-            context: formattedContext
+            context: formattedContext, 
         }
     }, 
 
@@ -28,7 +90,9 @@ export const AIAdvisorChain = RunnableSequence.from([
       console.log('userPrompt:', userPrompt)
   
       const prompt = ChatPromptTemplate.fromMessages([
-        SystemMessagePromptTemplate.fromTemplate(systemPrompt), 
+        SystemMessagePromptTemplate.fromTemplate(systemPrompt),
+        new MessagesPlaceholder('history'),  
+        new MessagesPlaceholder("long_term_history"),
         HumanMessagePromptTemplate.fromTemplate("{input}")
       ])
 
@@ -89,6 +153,7 @@ NEVER include explanation outside the JSON.
 
 
 const buildUserPrompt = ({ question, userProfile, context }) => {
+
   let prompt = `❓ Question:\n${question}\n`
 
   if (userProfile && Object.keys(userProfile).length > 0) {

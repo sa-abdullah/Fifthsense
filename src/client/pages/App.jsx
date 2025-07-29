@@ -91,14 +91,14 @@ const App = () => {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="text-white space-y-8">
               <h1 className="text-5xl lg:text-6xl font-black leading-tight">
-                Transform Your
+                Smarter Investing
                 <span className="block bg-gradient-to-r from-yellow-300 to-pink-300 bg-clip-text text-transparent">
-                  Business Intelligence
+                  Made Simple
                 </span>
               </h1>
               <p className="text-xl lg:text-2xl text-white/90 leading-relaxed">
-                Unlock the power of your data with our cutting-edge analytics platform. 
-                Make informed decisions faster with real-time insights and intelligent automation.
+                AI Insights for the Nigerian Stock Market.
+                FifthSense helps you invest wisely with real-time analysis and personalized stock advice.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <button className="group bg-white/20 backdrop-blur-xl text-white px-8 py-4 rounded-full font-semibold border-2 border-white/30 hover:bg-white/30 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center space-x-2">
@@ -131,42 +131,42 @@ const App = () => {
             <h2 className="text-4xl lg:text-5xl font-black text-white mb-6">
               Powerful Features for
               <span className="block bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                Modern Businesses
+                Nigerian Investors
               </span>
             </h2>
             <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-              Everything you need to turn your data into actionable insights and drive business growth.
+              Everything you need to grow your wealth and stay ahead of the curve.
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             <FeatureCard
               icon={BarChart3}
-              title="Real-time Analytics"
-              description="Monitor your business performance with live dashboards and instant data updates. Get insights as they happen, not hours later."
+              title="Real-time Stock Signals"
+              description="Track market movements on the Nigerian Stock Exchange as they happen. Get alerts, updates, and price changes instantly."
               delay={0}
             />
             <FeatureCard
               icon={Bot}
-              title="AI-Powered Insights"
-              description="Leverage machine learning algorithms to discover hidden patterns and predict future trends automatically."
+              title="AI-Powered Portfolio Advisory"
+              description="Let our smart algorithms do the research for you. Analyzing fundamentals, news, sentiment, and trends to suggest the best NGX-listed opportunities."
               delay={200}
             />
             <FeatureCard
               icon={Link}
-              title="Seamless Integration"
-              description="Connect with over 100+ data sources and tools. No coding required - just plug and play with your existing systems."
+              title="NGX-Focused Intelligence"
+              description="From blue-chip stocks to undervalued gems, our platform understands the dynamics of Nigeria’s capital market and tailors advice accordingly."
               delay={400}
             />
             <FeatureCard
               icon={Smartphone}
-              title="Mobile-First Design"
-              description="Access your data anywhere, anytime. Our responsive platform works perfectly on desktop, tablet, and mobile devices."
+              title="Accessible Anywhere"
+              description="Stay in control whether you’re on mobile or desktop. FifthSense is designed for the modern Nigerian investor on the go."
               delay={600}
             />
             <FeatureCard
               icon={Shield}
-              title="Enterprise Security"
+              title="Security you can Trust"
               description="Bank-level encryption and compliance with GDPR, SOC 2, and other security standards to keep your data safe."
               delay={800}
             />
@@ -181,7 +181,7 @@ const App = () => {
       </section>
 
       {/* Stats Section */}
-      <section ref={statsRef} className="py-20 bg-gradient-to-r from-gray-900 via-purple-900/20 to-gray-900">
+      {/* <section ref={statsRef} className="py-20 bg-gradient-to-r from-gray-900 via-purple-900/20 to-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
             <div className="space-y-2">
@@ -210,16 +210,16 @@ const App = () => {
             </div>
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-purple-600 to-blue-600">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl lg:text-5xl font-black text-white mb-6">
-            Ready to Transform Your Data?
+            Ready to Transform Your Investment?
           </h2>
           <p className="text-xl text-white/90 mb-10">
-            Join thousands of companies already using DataFlow to make smarter decisions and drive growth.
+            Join thousands of investors already using FifthSense to make smarter decisions and make profits.
           </p>
           <button className="group bg-white/20 backdrop-blur-xl text-white px-10 py-4 rounded-full font-bold text-lg border-2 border-white/30 hover:bg-white hover:text-purple-600 hover:-translate-y-1 transition-all duration-300 flex items-center justify-center space-x-2 mx-auto">
             <span>Start Your Free Trial</span>

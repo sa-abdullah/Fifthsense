@@ -247,6 +247,15 @@ const AIAdvisor = () => {
       setChatInput('');
       setIsTyping(true);
 
+      // try {
+      //   await axios.post(`${backendURL}/api/sessions/${activeSessionId}/chats`, {
+      //     role: 'user',
+      //     content: userMessage
+      //   });
+      // } catch(err) {
+      //   console.error('Failed to save user message to backend', err.message)
+      // }
+
       // Simulate AI response delay
       // setTimeout( async () => {
         const aiResponse = {
@@ -300,6 +309,12 @@ const AIAdvisor = () => {
               }
             ]
           });
+
+          // await axios.post(`${backendURL}/api/sessions/${activeSessionId}/chats`, {
+          //   role: 'ai', 
+          //   content: res.content || streamedContent
+          // })
+
 
         } catch(err) {
           console.error(err);

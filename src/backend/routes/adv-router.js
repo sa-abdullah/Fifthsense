@@ -1,19 +1,23 @@
 import express from 'express';
 import { cachedStocks } from './router.js';
-import { AIAdvisorChain } from '../chains/advisor-chain.js';
+import { AIAdvisorChain, vectorStore, getOrCreateMemory } from '../chains/advisor-chain.js';
 import verifyToken  from '../firebase-admin.js';
-import { fetchAllStocks } from './router.js'
+import { Chat, Session } from '../data-model.js';
+// import { fetchAllStocks } from './router.js'
 
 
 const router = express.Router()
 
 router.post('/ask', verifyToken, async (req, res) => {
-    try {
-        const { question, profile } = req.body;
-        const user = req.user;
+    const { question, profile } = req.body;
+    const user = req.user;
+    if (!question) return res.status(400).json({ error: 'Question is required' });
+    if (!user) return res.status(401).json({ error: 'Unauthorized user' });
 
-        if (!question) return res.status(400).json({ error: 'Question is required' });
-        if (!user) return res.status(401).json({ error: 'Unauthorized user' });
+
+    try {
+        const memory = getOrCreateMemory(user.uid)
+
 
         const input = {
             question,
@@ -30,11 +34,12 @@ router.post('/ask', verifyToken, async (req, res) => {
         res.setHeader('Transfer-Encoding', 'chunked');
         res.flushHeaders();
 
-        const stream = await chain.stream({ input: userPrompt });
+        const memoryVars = await memory.loadMemoryVariables({ input: userPrompt });
+        const stream = await chain.stream({ input: userPrompt, ...memoryVars });
 
         let fullText = '';
 
-        (async () => {
+        try {
             for await (const chunk of stream) {
                 const token = chunk?.content || '';
                 if (token) {
@@ -63,12 +68,42 @@ router.post('/ask', verifyToken, async (req, res) => {
 
             // ✅ Final structured event
             res.write(`data: ${JSON.stringify({ done: true, content: mainContent, suggestions, analysis })}\n\n`);
-            res.end();
-        })();
+
+            try {
+                let session = await Session.findOne({ userId: user.uid }).sort({ createdAt: -1 })
+                if (!session) session = await Session.create({ userId: user.uid})
+
+                const saveOps = [
+                    //Saves session for short-term context
+                    memory.saveContext({ input: question }, { output: mainContent }),
+
+                    //Saves session for longer-term context
+                    vectorStore.addDocuments([{
+                            pageContent: `${question} ${mainContent}`,
+                            metadata: { userId: user.uid, timestamp: new Date().toISOString() }
+                    }]).catch(err => console.error("Pinecone save failed:", err)), 
+
+                    //Saves session on MongoDB for UI Rendering
+                    Chat.create({ sessionId: session._id, role: 'user', content: question }),
+                    Chat.create({ sessionId: session._id, role: 'ai', content: mainContent })
+                ]
+                await Promise.all(saveOps);
+            } catch(saveErr) {
+                console.error('Save operation failed:', saveErr)
+            } 
+
+        } catch(streamErr) {
+            console.error('Streaming error:', streamErr);
+            res.write(`data: ${JSON.stringify({ done: true, error: "Streaming failed" })}\n\n`);
+        } finally {
+                res.end();
+        }
+
     } catch (err) {
-        console.error('Advisor error:', err);
-        res.status(500).json({ success: false, error: 'Failed to process question' });
-    }
+        console.error('Advisor Streaming error:', err);
+        res.write(`data: ${JSON.stringify({ done: true, error: "Streaming failed" })}\n\n`);
+    } 
 });
+
 
 export default router;
