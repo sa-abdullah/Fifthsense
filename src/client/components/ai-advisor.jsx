@@ -238,7 +238,7 @@ const AIAdvisor = () => {
     if (chatInput.trim()) {
       const userMessage = {
         id: Date.now(),
-        type: 'user',
+        role: 'user',
         content: chatInput,
         timestamp: new Date()
       };
@@ -260,7 +260,7 @@ const AIAdvisor = () => {
       // setTimeout( async () => {
         const aiResponse = {
           id: Date.now() + 1,
-          type: 'ai',
+          role: 'ai',
           content: '',
           timestamp: new Date(),
           suggestions: [], 
@@ -282,7 +282,7 @@ const AIAdvisor = () => {
               streamedContent += tokenChunk; 
               setMessages(prev => {
                 const last = prev[prev.length - 1]; 
-                if (!last || last.type !== 'ai') return prev; 
+                if (!last || last.role !== 'ai') return prev; 
 
                 return [
                   ...prev.slice(0, -1), 
@@ -297,7 +297,7 @@ const AIAdvisor = () => {
           
           setMessages(prev => {
             const last = prev[prev.length - 1];
-            if (!last || last.type !== 'ai') return prev;
+            if (!last || last.role !== 'ai') return prev;
 
             return [
               ...prev.slice(0, -1), 
@@ -320,7 +320,7 @@ const AIAdvisor = () => {
           console.error(err);
           setMessages(prev => {
             const last = prev[prev.length - 1];
-            if (!last || last.type !== 'ai') return prev;
+            if (!last || last.role !== 'ai') return prev;
           
             return [
               ...prev.slice(0, -1),
@@ -540,19 +540,19 @@ const AIAdvisor = () => {
                 className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-gray-50/50 to-white"
               >
                 {messages.map((message) => (
-                  <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-3xl ${message.type === 'user' ? 'ml-12' : 'mr-12'}`}>
+                  <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-3xl ${message.role === 'user' ? 'ml-12' : 'mr-12'}`}>
                       {/* Message Header */}
-                      <div className={`flex items-center gap-2 mb-2 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        {message.type === 'ai' && (
+                      <div className={`flex items-center gap-2 mb-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        {message.role === 'ai' && (
                           <div className="w-8 h-8 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full flex items-center justify-center">
                             <Bot className="w-4 h-4 text-white" />
                           </div>
                         )}
                         <span className="text-xs text-gray-500 font-medium">
-                          {message.type === 'ai' ? 'AI Advisor' : 'You'} • {formatTime(message.timestamp)}
+                          {message.role === 'ai' ? 'AI Advisor' : 'You'} • {formatTime(message.timestamp)}
                         </span>
-                        {message.type === 'user' && (
+                        {message.role === 'user' && (
                           <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center">
                             <User className="w-4 h-4 text-white" />
                           </div>
@@ -561,7 +561,7 @@ const AIAdvisor = () => {
 
                       {/* Message Content */}
                       <div className={`p-4 rounded-2xl shadow-sm ${
-                        message.type === 'user' 
+                        message.role === 'user' 
                           ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' 
                           : 'bg-white border border-gray-200 text-gray-900'
                       }`}>

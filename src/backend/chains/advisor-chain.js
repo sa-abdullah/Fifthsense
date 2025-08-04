@@ -1,14 +1,11 @@
 import { ChatGroq } from '@langchain/groq'
-import { RunnableSequence } from '@langchain/core/runnables';
+import { RunnableSequence, RunnablePassthrough } from '@langchain/core/runnables';
 import dotenv from 'dotenv'
 import { ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts'
-import { BufferWindowMemory, CombinedMemory } from "langchain/memory";
-import { VectorStoreRetrieverMemory } from 'langchain/memory';
-import { Chroma } from "@langchain/community/vectorstores/chroma";
+import { BufferWindowMemory } from "langchain/memory";
 import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/huggingface_transformers";
 import { PineconeStore } from '@langchain/pinecone'
 import { Pinecone } from '@pinecone-database/pinecone'
-import { Readable } from 'stream'
 import mongoose from 'mongoose';
 
 dotenv.config()
@@ -32,30 +29,50 @@ const embeddings = new HuggingFaceTransformersEmbeddings({
   model: "Xenova/all-MiniLM-L6-v2"
 });
 
-export const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
-  pineconeIndex: index
-})
-
+export const getVectorStore = async() => {
+  try {
+    const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+      pineconeIndex: index
+    });
+    
+    if (!vectorStore || typeof vectorStore.asRetriever !== 'function' || typeof vectorStore.addDocuments !== 'function') {
+      console.error('Vector store is missing required methods');
+      return null;
+    }
+    
+    return vectorStore;
+  } catch (error) {
+    console.error('Failed to initialize vector store:', error);
+    return null;
+  }
+}
 
 const memoryCache = new Map();
-export const getOrCreateMemory = (userId) => {
+
+// ✅ Modern approach: Separate retriever function instead of deprecated VectorStoreRetrieverMemory
+async function getRelevantHistory(vectorStore, userId, query) {
+  if (!vectorStore) return [];
+  
+  try {
+    const retriever = vectorStore.asRetriever({
+      filter: { userId }, 
+      k: 3 // Fewer docs for history to avoid token limits
+    });
+    
+    const relevantDocs = await retriever.invoke(query);
+    return relevantDocs.map(doc => doc.pageContent).join('\n');
+  } catch (error) {
+    console.error('Error retrieving relevant history:', error);
+    return [];
+  }
+}
+
+export const getOrCreateMemory = async(userId) => {
   if (memoryCache.has(userId)) {
     return memoryCache.get(userId);
   }
 
-  
-
-  // ✅ User-specific retriever
-  const retriever = vectorStore.asRetriever({
-    filter: { userId } // Security + relevance
-  });
-
-  const vectorMemory = new VectorStoreRetrieverMemory({
-    retriever,
-    memoryKey: "long_term_history", 
-    inputKey: "input"
-  });
-
+  // ✅ Use only BufferWindowMemory - no more deprecated combined memory
   const bufferMemory = new BufferWindowMemory({
     k: 5,
     returnMessages: true,
@@ -63,47 +80,89 @@ export const getOrCreateMemory = (userId) => {
     inputKey: "input"
   });
 
-  const combinedMemory = new CombinedMemory({
-    memories: [bufferMemory, vectorMemory]
-  });
+  try {
+    const vectorStore = await getVectorStore();
+    
+    const result = { 
+      bufferMemory, 
+      vectorStore, 
+      hasVectorMemory: !!vectorStore
+    };
 
-  memoryCache.set(userId, combinedMemory);
+    memoryCache.set(userId, result);
+    setTimeout(() => memoryCache.delete(userId), 1000 * 60 * 30);
 
-  setTimeout(() => memoryCache.delete(userId), 1000 * 60 * 30);
-  return combinedMemory;
+    console.log(`✅ Memory system initialized for user: ${userId}, hasVector: ${!!vectorStore}`);
+    return result;
+
+  } catch (error) {
+    console.error('Error creating memory system for user:', userId, error);
+    
+    const fallbackResult = { 
+      bufferMemory, 
+      vectorStore: null,
+      hasVectorMemory: false
+    };
+    
+    memoryCache.set(userId, fallbackResult);
+    setTimeout(() => memoryCache.delete(userId), 1000 * 60 * 30);
+    
+    return fallbackResult;
+  }
 }
 
 export const AIAdvisorChain = RunnableSequence.from([
     
     async (input) => {
-
         const formattedContext = formatMarketData(input.marketData)
         return {
             question: input.question, 
             userProfile: input.userProfile, 
-            context: formattedContext, 
+            context: formattedContext,
+            hasVectorMemory: input.hasVectorMemory || false,
+            vectorStore: input.vectorStore,
+            userId: input.userProfile?.uid
         }
     }, 
 
-    async ({ question, userProfile,  context }) => {
-      const userPrompt = buildUserPrompt({ question, userProfile, context })
-      console.log('userPrompt:', userPrompt)
-  
-      const prompt = ChatPromptTemplate.fromMessages([
-        SystemMessagePromptTemplate.fromTemplate(systemPrompt),
-        new MessagesPlaceholder('history'),  
-        new MessagesPlaceholder("long_term_history"),
-        HumanMessagePromptTemplate.fromTemplate("{input}")
-      ])
+    // ✅ Add retrieval step for long-term memory
+    async ({ question, userProfile, context, hasVectorMemory, vectorStore, userId }) => {
+      let longTermHistory = '';
+      
+      if (hasVectorMemory && vectorStore && userId) {
+        try {
+          longTermHistory = await getRelevantHistory(vectorStore, userId, question);
+          console.log('Long-term history retrieved:', longTermHistory ? 'Yes' : 'No');
+        } catch (error) {
+          console.error('Failed to retrieve long-term history:', error);
+        }
+      }
+      
+      return {
+        question,
+        userProfile,
+        context,
+        longTermHistory,
+        hasVectorMemory
+      };
+    },
 
+    async ({ question, userProfile, context, longTermHistory, hasVectorMemory }) => {
+      const userPrompt = buildUserPrompt({ question, userProfile, context, longTermHistory })
+  
+      // ✅ Simplified prompt - no more deprecated memory placeholders
+      const messages = [
+        SystemMessagePromptTemplate.fromTemplate(systemPrompt),
+        new MessagesPlaceholder('history'),
+        HumanMessagePromptTemplate.fromTemplate("{input}")
+      ];
+
+      const prompt = ChatPromptTemplate.fromMessages(messages);
       const chain = prompt.pipe(model)
 
       return { chain, userPrompt }
     }
-  
 ])
-
-
 
 const formatMarketData = (stocks) => {
   if (!stocks || stocks.length === 0) {
@@ -113,47 +172,34 @@ const formatMarketData = (stocks) => {
     return `${stock.symbol} (${stock.securityName}) — Open: ₦${stock.open}, Close: ₦${stock.close}, Change: ${stock.change}, Volume: ${stock.dailyVolume}`;
   });
 
-  return lines.slice(0, 50).join('\n'); // ✅ Convert to string
+  return lines.slice(0, 50).join('\n');
 };
-
-
-
-
-
 
 const systemPrompt = `
 You are an intelligent, helpful AI assistant with deep expertise in financial markets (especially U.S. stocks and Nigerian investor needs). You can also handle general-purpose queries beyond finance with clarity and friendliness.
 
 Only use the user's financial profile or market data when relevant to the question. If the user asks a casual or unrelated question (e.g., "Hi", "Tell me a joke", "How's the weather?"), respond naturally without referencing their profile or finance.
 
-Always return your answer in **valid JSON format** with the following keys:
-{{
-  "content": "<a natural language explanation>",
-  "suggestions": ["<short follow-up questions>"],
-  "analysis": {{
-    "rating": "Buy/Sell/Hold",
-    "targetPrice": "₦45.00",
-    "currentPrice": "₦38.50",
-    "upside": "16.9%"
-}}
-// Only include the 'analysis' field if your answer includes evaluation of a specific stock or investment.
-// Only include the 'suggestions' field if absolutely needed
-// You must always return the 'content' field and it must always be a string
-// If market data is unavailable, mention this in your response but still provide helpful general advice
-}}
-If the question is unrelated to finance or analysis, leave out the analysis field.
-Ensure the entire response is a single parsable JSON object.
-NEVER wrap with backticks or triple backticks.
-NEVER include explanation outside the JSON.
+Always return your answer in valid JSON format with these keys:
+- "content": a natural language explanation (required)
+- "suggestions": array of short follow-up questions (optional)
+- "analysis": object with rating, targetPrice, currentPrice, upside (optional - only for stock evaluations)
+
+Example format:
+{{"content": "Hello! How can I help you today?", "suggestions": ["What stocks should I consider?", "How should I diversify my portfolio?"]}}
+
+Rules:
+- Only include 'analysis' field if evaluating a specific stock or investment
+- Only include 'suggestions' field if absolutely needed
+- Always include 'content' field as a string
+- If market data unavailable, provide helpful general advice
+- For non-finance questions, omit analysis field
+- Return single parsable JSON object only
+- Never use backticks or explanations outside JSON
 `.trim()
 
 
-
-
-
-
-const buildUserPrompt = ({ question, userProfile, context }) => {
-
+const buildUserPrompt = ({ question, userProfile, context, longTermHistory }) => {
   let prompt = `❓ Question:\n${question}\n`
 
   if (userProfile && Object.keys(userProfile).length > 0) {
@@ -164,21 +210,18 @@ const buildUserPrompt = ({ question, userProfile, context }) => {
     prompt += `\n📊 Market Data:\n${context}\n`
   }
 
-  prompt += `
-📦 Respond ONLY in this JSON format:
-{
-  "content": "Main answer here...",
-  "suggestions": ["Follow-up 1", "Follow-up 2"], // optional
-  "analysis": {
-    "rating": "Buy | Hold | Sell",               // optional
-    "currentPrice": "₦38.50", 
-    "targetPrice": "₦45.00",
-    "upside": "16.9%"
+  // ✅ Add long-term history if available
+  if (longTermHistory && longTermHistory.trim().length > 0) {
+    prompt += `\n📚 Relevant Past Conversations:\n${longTermHistory}\n`
   }
-}
+
+  prompt += `
+📦 Respond ONLY in JSON format like this example:
+{{"content": "Your main answer here...", "suggestions": ["Optional follow-up 1", "Optional follow-up 2"]}}
+
+For stock analysis, include analysis object:
+{{"content": "Analysis here...", "analysis": {{"rating": "Buy", "currentPrice": "₦38.50", "targetPrice": "₦45.00", "upside": "16.9%"}}}}
 `
 
   return prompt.trim()
 }
-
-

@@ -13,7 +13,7 @@
   "dependencies": {
     "@chroma-core/default-embed": "^0.1.8",
     "@langchain/community": "^0.3.49",
-    "@langchain/core": "^0.3.66",
+    "@langchain/core": "^0.3.49",
     "@langchain/groq": "^0.2.3",
     "@langchain/pinecone": "^0.2.0",
     "@pinecone-database/pinecone": "^5.1.2",
@@ -26,7 +26,7 @@
     "express": "^5.1.0",
     "firebase": "^11.9.1",
     "firebase-admin": "^12.7.0",
-    "langchain": "^0.3.29",
+    "langchain": "^0.3.30",
     "lucide-react": "^0.523.0",
     "mongodb": "^6.17.0",
     "mongoose": "^8.16.3",
