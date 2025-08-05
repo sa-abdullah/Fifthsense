@@ -14,7 +14,7 @@ mongoose.connect(process.env.MONGODB_URI)
 
 const model = new ChatGroq({
     temperature: 0.7, 
-    model: 'llama-3.1-70b-versatile', 
+    model: 'llama-3.1-8b-instant', 
     apiKey: process.env.GROQ_API_KEY
 })
 
