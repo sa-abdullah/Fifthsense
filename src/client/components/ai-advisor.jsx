@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { 
   TrendingUp, 
+  Plus,
   MessageCircle, 
   Target, 
   BarChart3, 
@@ -55,11 +55,8 @@ const getUserToken = () =>
       }
     });
   });
-
-
-
   
-const sendSecureMessage = async (question, profile = {}, onTokenChunk) => {
+const sendSecureMessage = async (question, profile = {}, onTokenChunk, sessionId) => {
   
   const token = await getUserToken();
   console.log(token)
@@ -72,7 +69,7 @@ const sendSecureMessage = async (question, profile = {}, onTokenChunk) => {
         Authorization: `Bearer ${token}`, 
         'Content-Type': 'application/json'
       }, 
-      body: JSON.stringify({ question, profile })
+      body: JSON.stringify({ question, profile, sessionId})
     }
   );
   if (!response.ok) throw new Error('Network response was not ok');
@@ -117,10 +114,6 @@ const sendSecureMessage = async (question, profile = {}, onTokenChunk) => {
   };
 };
 
-
-
-
-
 const AIAdvisor = () => {
   const { activeTab, setActiveTab } = useGlobal();
   const [chatInput, setChatInput] = useState('');
@@ -130,18 +123,94 @@ const AIAdvisor = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarType, setSidebarType] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
 
   const chatContainerRef = useRef(null);
   const inputRef = useRef(null);
 
-  const quickQuestions = [
-    { text: "What's the market outlook for Q4?", icon: TrendingUp },
-    { text: "Should I increase my tech allocation?", icon: Activity },
-    { text: "How to hedge against inflation?", icon: AlertTriangle },
-    { text: "Rebalance my portfolio", icon: Target },
-    { text: "Best dividend stocks now?", icon: DollarSign },
-    { text: "Currency hedging strategies", icon: RefreshCw }
-  ];
+
+
+    // 📌 Load last opened chat from localStorage
+  useEffect(() => {
+    const savedChat = localStorage.getItem('currentChat');
+    if (savedChat) setMessages(JSON.parse(savedChat));
+  }, []);
+
+  // 📌 Save current chat to localStorage
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem('currentChat', JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  // 📌 Fetch chat history from backend
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const token = await getUserToken();
+        const res = await fetch(`${backendURL}/api/advisor/history`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        setChatHistory(data);
+      } catch (err) {
+        console.error('Error fetching chat history:', err);
+      }
+    };
+    fetchHistory();
+  }, []);
+
+  // 📌 Fetch messages for a selected session
+  const loadHistoryItem = async (sessionId) => {
+    try {
+      const token = await getUserToken();
+      const res = await fetch(`${backendURL}/api/advisor/history/${sessionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setMessages(data);
+      localStorage.setItem('currentChat', JSON.stringify(data));
+      setSidebarOpen(false);
+    } catch (err) {
+      console.error('Error loading session messages:', err);
+    }
+  };
+
+  const startNewChat = async () => {
+    try {
+      const token = await getUserToken();
+      const res = await fetch(`${backendURL}/api/advisor/session`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+      });
+      const { sessionId } = await res.json();
+      setCurrentSessionId(sessionId);
+
+      setMessages([]);
+      setChatInput('');
+      setIsTyping(false);
+      localStorage.removeItem('currentChat');
+      setSidebarOpen(false);
+      setSidebarType(null);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    } catch (err) {
+      console.error('❌ Failed to start new chat session:', err);
+    }
+  };
+
+
+  // const quickQuestions = [
+  //   { text: "What's the market outlook for Q4?", icon: TrendingUp },
+  //   { text: "Should I increase my tech allocation?", icon: Activity },
+  //   { text: "How to hedge against inflation?", icon: AlertTriangle },
+  //   { text: "Rebalance my portfolio", icon: Target },
+  //   { text: "Best dividend stocks now?", icon: DollarSign },
+  //   { text: "Currency hedging strategies", icon: RefreshCw }
+  // ];
 
   const marketAlerts = [
     {
@@ -170,43 +239,43 @@ const AIAdvisor = () => {
     }
   ];
 
-  const chatHistory = [
-    {
-      id: 1,
-      title: "Portfolio Review & Recommendations",
-      preview: "Analyzed your current holdings and suggested rebalancing...",
-      timestamp: new Date(Date.now() - 86400000), // 1 day ago
-      messageCount: 12
-    },
-    {
-      id: 2,
-      title: "DANGOTE Stock Analysis",
-      preview: "Comprehensive analysis of DANGOTE's financial performance...",
-      timestamp: new Date(Date.now() - 172800000), // 2 days ago
-      messageCount: 8
-    },
-    {
-      id: 3,
-      title: "Banking Sector Investment Strategy",
-      preview: "Discussed investment opportunities in Nigerian banks...",
-      timestamp: new Date(Date.now() - 259200000), // 3 days ago
-      messageCount: 15
-    },
-    {
-      id: 4,
-      title: "Market Outlook for Q4 2024",
-      preview: "Predictions and recommendations for the final quarter...",
-      timestamp: new Date(Date.now() - 604800000), // 1 week ago
-      messageCount: 20
-    },
-    {
-      id: 5,
-      title: "Dividend Yield Strategy",
-      preview: "Best dividend-paying stocks on the NGX...",
-      timestamp: new Date(Date.now() - 1209600000), // 2 weeks ago
-      messageCount: 6
-    }
-  ];
+  // const chatHistory = [
+  //   {
+  //     id: 1,
+  //     title: "Portfolio Review & Recommendations",
+  //     preview: "Analyzed your current holdings and suggested rebalancing...",
+  //     timestamp: new Date(Date.now() - 86400000), // 1 day ago
+  //     messageCount: 12
+  //   },
+  //   {
+  //     id: 2,
+  //     title: "DANGOTE Stock Analysis",
+  //     preview: "Comprehensive analysis of DANGOTE's financial performance...",
+  //     timestamp: new Date(Date.now() - 172800000), // 2 days ago
+  //     messageCount: 8
+  //   },
+  //   {
+  //     id: 3,
+  //     title: "Banking Sector Investment Strategy",
+  //     preview: "Discussed investment opportunities in Nigerian banks...",
+  //     timestamp: new Date(Date.now() - 259200000), // 3 days ago
+  //     messageCount: 15
+  //   },
+  //   {
+  //     id: 4,
+  //     title: "Market Outlook for Q4 2024",
+  //     preview: "Predictions and recommendations for the final quarter...",
+  //     timestamp: new Date(Date.now() - 604800000), // 1 week ago
+  //     messageCount: 20
+  //   },
+  //   {
+  //     id: 5,
+  //     title: "Dividend Yield Strategy",
+  //     preview: "Best dividend-paying stocks on the NGX...",
+  //     timestamp: new Date(Date.now() - 1209600000), // 2 weeks ago
+  //     messageCount: 6
+  //   }
+  // ];
 
   useEffect(() => {
     const checkMobile = () => {
@@ -228,14 +297,19 @@ const AIAdvisor = () => {
     }
   };
 
+  
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
+  let aiMessageAdded = useRef(true)
+
+
   const sendMessage = async () => {
     if (chatInput.trim()) {
+      
       const userMessage = {
         id: Date.now(),
         role: 'user',
@@ -247,92 +321,100 @@ const AIAdvisor = () => {
       setChatInput('');
       setIsTyping(true);
 
-      // try {
-      //   await axios.post(`${backendURL}/api/sessions/${activeSessionId}/chats`, {
-      //     role: 'user',
-      //     content: userMessage
-      //   });
-      // } catch(err) {
-      //   console.error('Failed to save user message to backend', err.message)
-      // }
+      const aiResponse = {
+        id: Date.now() + 1,
+        role: 'ai',
+        content: '⌛ AI Advisor is typing...',
+        timestamp: new Date(),
+        suggestions: [], 
+        analysis: null
+      };
 
-      // Simulate AI response delay
-      // setTimeout( async () => {
-        const aiResponse = {
-          id: Date.now() + 1,
-          role: 'ai',
-          content: '',
-          timestamp: new Date(),
-          suggestions: [], 
-          analysis: null
-        };
+      setMessages(prev => [...prev, aiResponse]);
+      let streamedContent = ''
 
-        setMessages(prev => [...prev, aiResponse]);
-        let streamedContent = ''
+      try {
+        const res = await sendSecureMessage(
+          chatInput, 
+          {
+            risk: 'balanced',
+            budget: 150000,
+            horizon: '3 years'
+          }, 
+          (tokenChunk) => {
+            streamedContent += tokenChunk; 
+            setMessages(prev => {
 
-        try {
-          const res = await sendSecureMessage(
-            chatInput, 
-            {
-              risk: 'balanced',
-              budget: 150000,
-              horizon: '3 years'
-            }, 
-            (tokenChunk) => {
-              streamedContent += tokenChunk; 
-              setMessages(prev => {
-                const last = prev[prev.length - 1]; 
-                if (!last || last.role !== 'ai') return prev; 
-
+              if (aiMessageAdded.current) {
+                aiMessageAdded.current = false
                 return [
-                  ...prev.slice(0, -1), 
+                  ...prev, 
                   {
-                    ...last, 
+                    ...aiResponse, 
                     content: streamedContent
                   }
                 ]
-              })
-            } 
-          );
-          
-          setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (!last || last.role !== 'ai') return prev;
+              }
 
+              const last = prev[prev.length - 1]; 
+              if (!last || last.role !== 'ai') return prev; 
+
+              return [
+                ...prev.slice(0, -1), 
+                {
+                  ...last, 
+                  content: streamedContent
+                }
+              ]
+            })
+          }, 
+          currentSessionId
+        );
+        
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (!last || last.role !== 'ai') return prev;
+
+          return [
+            ...prev.slice(0, -1), 
+            {
+              ...last, 
+              content: res?.content || streamedContent || 'Sorry, I could not process your request', 
+              suggestions: Array.isArray(res?.suggestions) ? res?.suggestions : [],  // optional
+              analysis: typeof res?.analysis === 'object' ? res?.analysis : null       // optional
+            }
+          ]
+        });
+
+      } catch(err) {
+        console.error(err);
+        setMessages(prev => {
+
+          if (!aiMessageAdded) {
+            aiMessageAdded = true
             return [
-              ...prev.slice(0, -1), 
+              ...prev, 
               {
-                ...last, 
-                content: res?.content || streamedContent || 'Sorry, I could not process your request', 
-                suggestions: Array.isArray(res?.suggestions) ? res?.suggestions : [],  // optional
-                analysis: typeof res?.analysis === 'object' ? res?.analysis : null       // optional
+                ...aiResponse, 
+                content: streamedContent
               }
             ]
-          });
+          }
 
-          // await axios.post(`${backendURL}/api/sessions/${activeSessionId}/chats`, {
-          //   role: 'ai', 
-          //   content: res.content || streamedContent
-          // })
-
-
-        } catch(err) {
-          console.error(err);
-          setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (!last || last.role !== 'ai') return prev;
-          
-            return [
-              ...prev.slice(0, -1),
-              {
-                ...last,
-                content: '⚠️ Error: Failed to connect to the AI advisor.',
-              },
-            ];
-          });
-        } finally {
-          setIsTyping(false);
-        }
+          const last = prev[prev.length - 1];
+          if (!last || last.role !== 'ai') return prev;
+        
+          return [
+            ...prev.slice(0, -1),
+            {
+              ...last,
+              content: '⚠️ Error: Failed to connect to the AI advisor.',
+            },
+          ];
+        });
+      } finally {
+        setIsTyping(false);
+      }
       // }, 1500 + Math.random() * 1000);
     }
   };
@@ -348,12 +430,15 @@ const AIAdvisor = () => {
   };
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString('en-US', { 
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d)) return ''; // fallback if invalid
+    return d.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit',
       hour12: true 
     });
   };
+
 
 
   const renderSidebar = () => {
@@ -407,7 +492,7 @@ const AIAdvisor = () => {
         </div>
         <div className="space-y-3">
           {chatHistory.map((chat) => (
-            <div key={chat.id} className="p-4 rounded-lg hover:bg-gray-50 cursor-pointer border border-gray-200">
+            <div key={chat.id} onClick={() => loadHistoryItem(chat.id)} className="p-4 rounded-lg hover:bg-gray-50 cursor-pointer border border-gray-200">
               <div className="flex items-start gap-3">
                 <MessageSquare className="w-5 h-5 text-indigo-600 mt-0.5" />
                 <div className="flex-1 min-w-0">
@@ -466,6 +551,17 @@ const AIAdvisor = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+
+            {/* New Chat Button */}
+            <button
+              onClick={startNewChat}
+              className="p-2 rounded-lg transition-colors hover:bg-white/10 text-white/80 hover:text-white flex items-center gap-2"
+              title="Start New Chat"
+            >
+              <Plus className="w-5 h-5" />
+              {!isMobile && <span className="text-sm font-medium">New Chat</span>}
+            </button>
+
             {/* History Button */}
             <button
               onClick={() => toggleSidebar('history')}
@@ -503,7 +599,7 @@ const AIAdvisor = () => {
       </div>
 
       <div className="flex gap-6">
-        {/* Desktop Quick Questions Sidebar */}
+        {/* Desktop Quick Questions Sidebar
         {!isMobile && (
           <div className="w-64 flex-shrink-0">
             <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
@@ -528,7 +624,7 @@ const AIAdvisor = () => {
               </div>
             </div>
           </div>
-        )}
+        )} */}
 
         {/* Main Chat Interface */}
         <div className="flex-1 flex">
@@ -611,7 +707,7 @@ const AIAdvisor = () => {
                 ))}
 
                 {/* Typing Indicator */}
-                {isTyping && (
+                {/* {isTyping && (
                   <div className="flex justify-start">
                     <div className="max-w-3xl mr-12">
                       <div className="flex items-center gap-2 mb-2">
@@ -629,7 +725,7 @@ const AIAdvisor = () => {
                       </div>
                     </div>
                   </div>
-                )}
+                )} */}
               </div>
 
               {/* Chat Input */}
